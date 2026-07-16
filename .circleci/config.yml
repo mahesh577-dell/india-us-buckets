@@ -104,30 +104,64 @@ jobs:
             echo ""
 
             # ---- 2. Map each environment folder to its parameter name ----
+            # NOTE: folder names below are the on-disk layout
+            # (environments/<in|us>/<dev|staging|prod>/<in|us>-<svc>[-network]/).
+            # The run-* parameter names are unchanged from before the
+            # directory reshuffle - only these paths were updated.
             declare -A ENV_MAP=(
-              ["environments/india/host-dev/"]="run-india-host-dev"
-              ["environments/india/host-staging/"]="run-india-host-staging"
-              ["environments/india/host-prod/"]="run-india-host-prod"
-              ["environments/india/tms-dev/"]="run-india-tms-dev"
-              ["environments/india/vms-dev/"]="run-india-vms-dev"
-              ["environments/india/analytics-dev/"]="run-india-analytics-dev"
-              ["environments/india/tms-staging/"]="run-india-tms-staging"
-              ["environments/india/vms-staging/"]="run-india-vms-staging"
-              ["environments/india/tms-prod/"]="run-india-tms-prod"
-              ["environments/india/vms-prod/"]="run-india-vms-prod"
-              ["environments/india/analytics-prod/"]="run-india-analytics-prod"
-              ["environments/us/host-dev/"]="run-us-host-dev"
-              ["environments/us/host-staging/"]="run-us-host-staging"
-              ["environments/us/host-prod/"]="run-us-host-prod"
-              ["environments/us/tms-dev/"]="run-us-tms-dev"
-              ["environments/us/vms-dev/"]="run-us-vms-dev"
-              ["environments/us/analytics-dev/"]="run-us-analytics-dev"
-              ["environments/us/tms-staging/"]="run-us-tms-staging"
-              ["environments/us/vms-staging/"]="run-us-vms-staging"
-              ["environments/us/tms-prod/"]="run-us-tms-prod"
-              ["environments/us/vms-prod/"]="run-us-vms-prod"
-              ["environments/us/analytics-prod/"]="run-us-analytics-prod"
+              ["environments/in/dev/in-host-dev-network/"]="run-india-host-dev"
+              ["environments/in/staging/in-host-staging-network/"]="run-india-host-staging"
+              ["environments/in/prod/in-host-prod-network/"]="run-india-host-prod"
+              ["environments/in/dev/in-tms-dev/"]="run-india-tms-dev"
+              ["environments/in/dev/in-vms-dev/"]="run-india-vms-dev"
+              ["environments/in/dev/in-analytics-dev/"]="run-india-analytics-dev"
+              ["environments/in/staging/in-tms-staging/"]="run-india-tms-staging"
+              ["environments/in/staging/in-vms-staging/"]="run-india-vms-staging"
+              ["environments/in/prod/in-tms-prod/"]="run-india-tms-prod"
+              ["environments/in/prod/in-vms-prod/"]="run-india-vms-prod"
+              ["environments/in/prod/in-analytics-prod/"]="run-india-analytics-prod"
+              ["environments/us/dev/us-host-dev-network/"]="run-us-host-dev"
+              ["environments/us/staging/us-host-staging-network/"]="run-us-host-staging"
+              ["environments/us/prod/us-host-prod-network/"]="run-us-host-prod"
+              ["environments/us/dev/us-tms-dev/"]="run-us-tms-dev"
+              ["environments/us/dev/us-vms-dev/"]="run-us-vms-dev"
+              ["environments/us/dev/us-analytics-dev/"]="run-us-analytics-dev"
+              ["environments/us/staging/us-tms-staging/"]="run-us-tms-staging"
+              ["environments/us/staging/us-vms-staging/"]="run-us-vms-staging"
+              ["environments/us/prod/us-tms-prod/"]="run-us-tms-prod"
+              ["environments/us/prod/us-vms-prod/"]="run-us-vms-prod"
+              ["environments/us/prod/us-analytics-prod/"]="run-us-analytics-prod"
             )
+
+            # ---- 2b. Map (region, environment) -> its actual folder path,
+            #      needed for the manual single-environment trigger (case B).
+            #      This is the only lookup that has to know about the
+            #      dev/staging/prod nesting and the in-/us- prefixes.
+            declare -A ENV_PATH_MAP=(
+              ["india|host-dev"]="in/dev/in-host-dev-network"
+              ["india|host-staging"]="in/staging/in-host-staging-network"
+              ["india|host-prod"]="in/prod/in-host-prod-network"
+              ["india|tms-dev"]="in/dev/in-tms-dev"
+              ["india|vms-dev"]="in/dev/in-vms-dev"
+              ["india|analytics-dev"]="in/dev/in-analytics-dev"
+              ["india|tms-staging"]="in/staging/in-tms-staging"
+              ["india|vms-staging"]="in/staging/in-vms-staging"
+              ["india|tms-prod"]="in/prod/in-tms-prod"
+              ["india|vms-prod"]="in/prod/in-vms-prod"
+              ["india|analytics-prod"]="in/prod/in-analytics-prod"
+              ["us|host-dev"]="us/dev/us-host-dev-network"
+              ["us|host-staging"]="us/staging/us-host-staging-network"
+              ["us|host-prod"]="us/prod/us-host-prod-network"
+              ["us|tms-dev"]="us/dev/us-tms-dev"
+              ["us|vms-dev"]="us/dev/us-vms-dev"
+              ["us|analytics-dev"]="us/dev/us-analytics-dev"
+              ["us|tms-staging"]="us/staging/us-tms-staging"
+              ["us|vms-staging"]="us/staging/us-vms-staging"
+              ["us|tms-prod"]="us/prod/us-tms-prod"
+              ["us|vms-prod"]="us/prod/us-vms-prod"
+              ["us|analytics-prod"]="us/prod/us-analytics-prod"
+            )
+            SEL_ENV_PATH="${ENV_PATH_MAP["<< pipeline.parameters.region >>|<< pipeline.parameters.environment >>"]}"
 
             # ---- 3. Build the auto-detected booleans (one per env) ----
             AUTO_JSON="{"
@@ -154,9 +188,10 @@ jobs:
               --argjson sel_manual_trigger << pipeline.parameters.manual_trigger >> \
               --arg sel_region "<< pipeline.parameters.region >>" \
               --arg sel_environment "<< pipeline.parameters.environment >>" \
+              --arg sel_env_path "$SEL_ENV_PATH" \
               --argjson sel_run_bootstrap << pipeline.parameters.run_bootstrap >> \
               --arg sel_bootstrap_env "<< pipeline.parameters.bootstrap_env >>" \
-              '{sel_manual_trigger:$sel_manual_trigger, sel_region:$sel_region, sel_environment:$sel_environment, sel_run_bootstrap:$sel_run_bootstrap, sel_bootstrap_env:$sel_bootstrap_env}')
+              '{sel_manual_trigger:$sel_manual_trigger, sel_region:$sel_region, sel_environment:$sel_environment, sel_env_path:$sel_env_path, sel_run_bootstrap:$sel_run_bootstrap, sel_bootstrap_env:$sel_bootstrap_env}')
 
             # ---- 5. Merge manual params + auto-detected booleans ----
             PARAMS_JSON=$(jq -n --argjson a "$MANUAL_JSON" --argjson b "$AUTO_JSON" '$a + $b')

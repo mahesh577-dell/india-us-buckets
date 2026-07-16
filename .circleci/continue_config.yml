@@ -114,6 +114,14 @@ parameters:
       - vms-prod
       - analytics-prod
     default: host-dev
+  # Actual on-disk path for sel_region/sel_environment, e.g.
+  # "in/dev/in-tms-dev". Computed by config.yml (stage 1) since the
+  # folder layout (dev/staging/prod nesting + in-/us- prefixes +
+  # "-network" suffix on host) can't be built by simple string
+  # concatenation of sel_region/sel_environment alone.
+  sel_env_path:
+    type: string
+    default: "in/dev/in-host-dev-network"
 
   # ---- Manual bootstrap trigger (see use case C above) ----
   sel_run_bootstrap:
@@ -345,11 +353,11 @@ workflows:
     jobs:
       - validate:
           name: manual-validate
-          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          env_path: "<< pipeline.parameters.sel_env_path >>"
           context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
       - plan:
           name: manual-plan
-          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          env_path: "<< pipeline.parameters.sel_env_path >>"
           context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
           requires: [manual-validate]
       - hold-manual-approval:
@@ -360,7 +368,7 @@ workflows:
               only: main
       - apply:
           name: manual-apply
-          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          env_path: "<< pipeline.parameters.sel_env_path >>"
           context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
           requires: [hold-manual-approval]
           filters:
@@ -376,11 +384,11 @@ workflows:
     jobs:
       - validate:
           name: india-host-dev-validate
-          env_path: "india/host-dev"
+          env_path: "in/dev/in-host-dev-network"
           context: gcp-india-host-dev
       - plan:
           name: india-host-dev-plan
-          env_path: "india/host-dev"
+          env_path: "in/dev/in-host-dev-network"
           context: gcp-india-host-dev
           requires: [india-host-dev-validate]
       - hold-india-host-dev:
@@ -391,7 +399,7 @@ workflows:
               only: main
       - apply:
           name: india-host-dev-apply
-          env_path: "india/host-dev"
+          env_path: "in/dev/in-host-dev-network"
           context: gcp-india-host-dev
           requires: [hold-india-host-dev]
           filters:
@@ -407,11 +415,11 @@ workflows:
     jobs:
       - validate:
           name: india-host-staging-validate
-          env_path: "india/host-staging"
+          env_path: "in/staging/in-host-staging-network"
           context: gcp-india-host-staging
       - plan:
           name: india-host-staging-plan
-          env_path: "india/host-staging"
+          env_path: "in/staging/in-host-staging-network"
           context: gcp-india-host-staging
           requires: [india-host-staging-validate]
       - hold-india-host-staging:
@@ -422,7 +430,7 @@ workflows:
               only: main
       - apply:
           name: india-host-staging-apply
-          env_path: "india/host-staging"
+          env_path: "in/staging/in-host-staging-network"
           context: gcp-india-host-staging
           requires: [hold-india-host-staging]
           filters:
@@ -438,11 +446,11 @@ workflows:
     jobs:
       - validate:
           name: india-host-prod-validate
-          env_path: "india/host-prod"
+          env_path: "in/prod/in-host-prod-network"
           context: gcp-india-host-prod
       - plan:
           name: india-host-prod-plan
-          env_path: "india/host-prod"
+          env_path: "in/prod/in-host-prod-network"
           context: gcp-india-host-prod
           requires: [india-host-prod-validate]
       - hold-india-host-prod:
@@ -453,7 +461,7 @@ workflows:
               only: main
       - apply:
           name: india-host-prod-apply
-          env_path: "india/host-prod"
+          env_path: "in/prod/in-host-prod-network"
           context: gcp-india-host-prod
           requires: [hold-india-host-prod]
           filters:
@@ -469,11 +477,11 @@ workflows:
     jobs:
       - validate:
           name: india-tms-dev-validate
-          env_path: "india/tms-dev"
+          env_path: "in/dev/in-tms-dev"
           context: gcp-india-tms-dev
       - plan:
           name: india-tms-dev-plan
-          env_path: "india/tms-dev"
+          env_path: "in/dev/in-tms-dev"
           context: gcp-india-tms-dev
           requires: [india-tms-dev-validate]
       - hold-india-tms-dev:
@@ -484,7 +492,7 @@ workflows:
               only: main
       - apply:
           name: india-tms-dev-apply
-          env_path: "india/tms-dev"
+          env_path: "in/dev/in-tms-dev"
           context: gcp-india-tms-dev
           requires: [hold-india-tms-dev]
           filters:
@@ -500,11 +508,11 @@ workflows:
     jobs:
       - validate:
           name: india-vms-dev-validate
-          env_path: "india/vms-dev"
+          env_path: "in/dev/in-vms-dev"
           context: gcp-india-vms-dev
       - plan:
           name: india-vms-dev-plan
-          env_path: "india/vms-dev"
+          env_path: "in/dev/in-vms-dev"
           context: gcp-india-vms-dev
           requires: [india-vms-dev-validate]
       - hold-india-vms-dev:
@@ -515,7 +523,7 @@ workflows:
               only: main
       - apply:
           name: india-vms-dev-apply
-          env_path: "india/vms-dev"
+          env_path: "in/dev/in-vms-dev"
           context: gcp-india-vms-dev
           requires: [hold-india-vms-dev]
           filters:
@@ -531,11 +539,11 @@ workflows:
     jobs:
       - validate:
           name: india-analytics-dev-validate
-          env_path: "india/analytics-dev"
+          env_path: "in/dev/in-analytics-dev"
           context: gcp-india-analytics-dev
       - plan:
           name: india-analytics-dev-plan
-          env_path: "india/analytics-dev"
+          env_path: "in/dev/in-analytics-dev"
           context: gcp-india-analytics-dev
           requires: [india-analytics-dev-validate]
       - hold-india-analytics-dev:
@@ -546,7 +554,7 @@ workflows:
               only: main
       - apply:
           name: india-analytics-dev-apply
-          env_path: "india/analytics-dev"
+          env_path: "in/dev/in-analytics-dev"
           context: gcp-india-analytics-dev
           requires: [hold-india-analytics-dev]
           filters:
@@ -562,11 +570,11 @@ workflows:
     jobs:
       - validate:
           name: india-tms-staging-validate
-          env_path: "india/tms-staging"
+          env_path: "in/staging/in-tms-staging"
           context: gcp-india-tms-staging
       - plan:
           name: india-tms-staging-plan
-          env_path: "india/tms-staging"
+          env_path: "in/staging/in-tms-staging"
           context: gcp-india-tms-staging
           requires: [india-tms-staging-validate]
       - hold-india-tms-staging:
@@ -577,7 +585,7 @@ workflows:
               only: main
       - apply:
           name: india-tms-staging-apply
-          env_path: "india/tms-staging"
+          env_path: "in/staging/in-tms-staging"
           context: gcp-india-tms-staging
           requires: [hold-india-tms-staging]
           filters:
@@ -593,11 +601,11 @@ workflows:
     jobs:
       - validate:
           name: india-vms-staging-validate
-          env_path: "india/vms-staging"
+          env_path: "in/staging/in-vms-staging"
           context: gcp-india-vms-staging
       - plan:
           name: india-vms-staging-plan
-          env_path: "india/vms-staging"
+          env_path: "in/staging/in-vms-staging"
           context: gcp-india-vms-staging
           requires: [india-vms-staging-validate]
       - hold-india-vms-staging:
@@ -608,7 +616,7 @@ workflows:
               only: main
       - apply:
           name: india-vms-staging-apply
-          env_path: "india/vms-staging"
+          env_path: "in/staging/in-vms-staging"
           context: gcp-india-vms-staging
           requires: [hold-india-vms-staging]
           filters:
@@ -624,11 +632,11 @@ workflows:
     jobs:
       - validate:
           name: india-tms-prod-validate
-          env_path: "india/tms-prod"
+          env_path: "in/prod/in-tms-prod"
           context: gcp-india-tms-prod
       - plan:
           name: india-tms-prod-plan
-          env_path: "india/tms-prod"
+          env_path: "in/prod/in-tms-prod"
           context: gcp-india-tms-prod
           requires: [india-tms-prod-validate]
       - hold-india-tms-prod:
@@ -639,7 +647,7 @@ workflows:
               only: main
       - apply:
           name: india-tms-prod-apply
-          env_path: "india/tms-prod"
+          env_path: "in/prod/in-tms-prod"
           context: gcp-india-tms-prod
           requires: [hold-india-tms-prod]
           filters:
@@ -655,11 +663,11 @@ workflows:
     jobs:
       - validate:
           name: india-vms-prod-validate
-          env_path: "india/vms-prod"
+          env_path: "in/prod/in-vms-prod"
           context: gcp-india-vms-prod
       - plan:
           name: india-vms-prod-plan
-          env_path: "india/vms-prod"
+          env_path: "in/prod/in-vms-prod"
           context: gcp-india-vms-prod
           requires: [india-vms-prod-validate]
       - hold-india-vms-prod:
@@ -670,7 +678,7 @@ workflows:
               only: main
       - apply:
           name: india-vms-prod-apply
-          env_path: "india/vms-prod"
+          env_path: "in/prod/in-vms-prod"
           context: gcp-india-vms-prod
           requires: [hold-india-vms-prod]
           filters:
@@ -686,11 +694,11 @@ workflows:
     jobs:
       - validate:
           name: india-analytics-prod-validate
-          env_path: "india/analytics-prod"
+          env_path: "in/prod/in-analytics-prod"
           context: gcp-india-analytics-prod
       - plan:
           name: india-analytics-prod-plan
-          env_path: "india/analytics-prod"
+          env_path: "in/prod/in-analytics-prod"
           context: gcp-india-analytics-prod
           requires: [india-analytics-prod-validate]
       - hold-india-analytics-prod:
@@ -701,7 +709,7 @@ workflows:
               only: main
       - apply:
           name: india-analytics-prod-apply
-          env_path: "india/analytics-prod"
+          env_path: "in/prod/in-analytics-prod"
           context: gcp-india-analytics-prod
           requires: [hold-india-analytics-prod]
           filters:
@@ -717,11 +725,11 @@ workflows:
     jobs:
       - validate:
           name: us-host-dev-validate
-          env_path: "us/host-dev"
+          env_path: "us/dev/us-host-dev-network"
           context: gcp-us-host-dev
       - plan:
           name: us-host-dev-plan
-          env_path: "us/host-dev"
+          env_path: "us/dev/us-host-dev-network"
           context: gcp-us-host-dev
           requires: [us-host-dev-validate]
       - hold-us-host-dev:
@@ -732,7 +740,7 @@ workflows:
               only: main
       - apply:
           name: us-host-dev-apply
-          env_path: "us/host-dev"
+          env_path: "us/dev/us-host-dev-network"
           context: gcp-us-host-dev
           requires: [hold-us-host-dev]
           filters:
@@ -748,11 +756,11 @@ workflows:
     jobs:
       - validate:
           name: us-host-staging-validate
-          env_path: "us/host-staging"
+          env_path: "us/staging/us-host-staging-network"
           context: gcp-us-host-staging
       - plan:
           name: us-host-staging-plan
-          env_path: "us/host-staging"
+          env_path: "us/staging/us-host-staging-network"
           context: gcp-us-host-staging
           requires: [us-host-staging-validate]
       - hold-us-host-staging:
@@ -763,7 +771,7 @@ workflows:
               only: main
       - apply:
           name: us-host-staging-apply
-          env_path: "us/host-staging"
+          env_path: "us/staging/us-host-staging-network"
           context: gcp-us-host-staging
           requires: [hold-us-host-staging]
           filters:
@@ -779,11 +787,11 @@ workflows:
     jobs:
       - validate:
           name: us-host-prod-validate
-          env_path: "us/host-prod"
+          env_path: "us/prod/us-host-prod-network"
           context: gcp-us-host-prod
       - plan:
           name: us-host-prod-plan
-          env_path: "us/host-prod"
+          env_path: "us/prod/us-host-prod-network"
           context: gcp-us-host-prod
           requires: [us-host-prod-validate]
       - hold-us-host-prod:
@@ -794,7 +802,7 @@ workflows:
               only: main
       - apply:
           name: us-host-prod-apply
-          env_path: "us/host-prod"
+          env_path: "us/prod/us-host-prod-network"
           context: gcp-us-host-prod
           requires: [hold-us-host-prod]
           filters:
@@ -810,11 +818,11 @@ workflows:
     jobs:
       - validate:
           name: us-tms-dev-validate
-          env_path: "us/tms-dev"
+          env_path: "us/dev/us-tms-dev"
           context: gcp-us-tms-dev
       - plan:
           name: us-tms-dev-plan
-          env_path: "us/tms-dev"
+          env_path: "us/dev/us-tms-dev"
           context: gcp-us-tms-dev
           requires: [us-tms-dev-validate]
       - hold-us-tms-dev:
@@ -825,7 +833,7 @@ workflows:
               only: main
       - apply:
           name: us-tms-dev-apply
-          env_path: "us/tms-dev"
+          env_path: "us/dev/us-tms-dev"
           context: gcp-us-tms-dev
           requires: [hold-us-tms-dev]
           filters:
@@ -841,11 +849,11 @@ workflows:
     jobs:
       - validate:
           name: us-vms-dev-validate
-          env_path: "us/vms-dev"
+          env_path: "us/dev/us-vms-dev"
           context: gcp-us-vms-dev
       - plan:
           name: us-vms-dev-plan
-          env_path: "us/vms-dev"
+          env_path: "us/dev/us-vms-dev"
           context: gcp-us-vms-dev
           requires: [us-vms-dev-validate]
       - hold-us-vms-dev:
@@ -856,7 +864,7 @@ workflows:
               only: main
       - apply:
           name: us-vms-dev-apply
-          env_path: "us/vms-dev"
+          env_path: "us/dev/us-vms-dev"
           context: gcp-us-vms-dev
           requires: [hold-us-vms-dev]
           filters:
@@ -872,11 +880,11 @@ workflows:
     jobs:
       - validate:
           name: us-analytics-dev-validate
-          env_path: "us/analytics-dev"
+          env_path: "us/dev/us-analytics-dev"
           context: gcp-us-analytics-dev
       - plan:
           name: us-analytics-dev-plan
-          env_path: "us/analytics-dev"
+          env_path: "us/dev/us-analytics-dev"
           context: gcp-us-analytics-dev
           requires: [us-analytics-dev-validate]
       - hold-us-analytics-dev:
@@ -887,7 +895,7 @@ workflows:
               only: main
       - apply:
           name: us-analytics-dev-apply
-          env_path: "us/analytics-dev"
+          env_path: "us/dev/us-analytics-dev"
           context: gcp-us-analytics-dev
           requires: [hold-us-analytics-dev]
           filters:
@@ -903,11 +911,11 @@ workflows:
     jobs:
       - validate:
           name: us-tms-staging-validate
-          env_path: "us/tms-staging"
+          env_path: "us/staging/us-tms-staging"
           context: gcp-us-tms-staging
       - plan:
           name: us-tms-staging-plan
-          env_path: "us/tms-staging"
+          env_path: "us/staging/us-tms-staging"
           context: gcp-us-tms-staging
           requires: [us-tms-staging-validate]
       - hold-us-tms-staging:
@@ -918,7 +926,7 @@ workflows:
               only: main
       - apply:
           name: us-tms-staging-apply
-          env_path: "us/tms-staging"
+          env_path: "us/staging/us-tms-staging"
           context: gcp-us-tms-staging
           requires: [hold-us-tms-staging]
           filters:
@@ -934,11 +942,11 @@ workflows:
     jobs:
       - validate:
           name: us-vms-staging-validate
-          env_path: "us/vms-staging"
+          env_path: "us/staging/us-vms-staging"
           context: gcp-us-vms-staging
       - plan:
           name: us-vms-staging-plan
-          env_path: "us/vms-staging"
+          env_path: "us/staging/us-vms-staging"
           context: gcp-us-vms-staging
           requires: [us-vms-staging-validate]
       - hold-us-vms-staging:
@@ -949,7 +957,7 @@ workflows:
               only: main
       - apply:
           name: us-vms-staging-apply
-          env_path: "us/vms-staging"
+          env_path: "us/staging/us-vms-staging"
           context: gcp-us-vms-staging
           requires: [hold-us-vms-staging]
           filters:
@@ -965,11 +973,11 @@ workflows:
     jobs:
       - validate:
           name: us-tms-prod-validate
-          env_path: "us/tms-prod"
+          env_path: "us/prod/us-tms-prod"
           context: gcp-us-tms-prod
       - plan:
           name: us-tms-prod-plan
-          env_path: "us/tms-prod"
+          env_path: "us/prod/us-tms-prod"
           context: gcp-us-tms-prod
           requires: [us-tms-prod-validate]
       - hold-us-tms-prod:
@@ -980,7 +988,7 @@ workflows:
               only: main
       - apply:
           name: us-tms-prod-apply
-          env_path: "us/tms-prod"
+          env_path: "us/prod/us-tms-prod"
           context: gcp-us-tms-prod
           requires: [hold-us-tms-prod]
           filters:
@@ -996,11 +1004,11 @@ workflows:
     jobs:
       - validate:
           name: us-vms-prod-validate
-          env_path: "us/vms-prod"
+          env_path: "us/prod/us-vms-prod"
           context: gcp-us-vms-prod
       - plan:
           name: us-vms-prod-plan
-          env_path: "us/vms-prod"
+          env_path: "us/prod/us-vms-prod"
           context: gcp-us-vms-prod
           requires: [us-vms-prod-validate]
       - hold-us-vms-prod:
@@ -1011,7 +1019,7 @@ workflows:
               only: main
       - apply:
           name: us-vms-prod-apply
-          env_path: "us/vms-prod"
+          env_path: "us/prod/us-vms-prod"
           context: gcp-us-vms-prod
           requires: [hold-us-vms-prod]
           filters:
@@ -1027,11 +1035,11 @@ workflows:
     jobs:
       - validate:
           name: us-analytics-prod-validate
-          env_path: "us/analytics-prod"
+          env_path: "us/prod/us-analytics-prod"
           context: gcp-us-analytics-prod
       - plan:
           name: us-analytics-prod-plan
-          env_path: "us/analytics-prod"
+          env_path: "us/prod/us-analytics-prod"
           context: gcp-us-analytics-prod
           requires: [us-analytics-prod-validate]
       - hold-us-analytics-prod:
@@ -1042,7 +1050,7 @@ workflows:
               only: main
       - apply:
           name: us-analytics-prod-apply
-          env_path: "us/analytics-prod"
+          env_path: "us/prod/us-analytics-prod"
           context: gcp-us-analytics-prod
           requires: [hold-us-analytics-prod]
           filters:
