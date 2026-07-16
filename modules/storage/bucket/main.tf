@@ -24,10 +24,10 @@ resource "google_storage_bucket" "bucket" {
   project                     = var.project_id
   name                        = var.bucket_name
   location                    = var.region
-  storage_class                = var.storage_class
+  storage_class               = var.storage_class
   uniform_bucket_level_access = var.uniform_bucket_level_access
-  force_destroy                = var.force_destroy
-  public_access_prevention     = var.public_access_prevention
+  force_destroy               = var.force_destroy
+  public_access_prevention    = var.public_access_prevention
 
   versioning {
     enabled = var.versioning_enabled
