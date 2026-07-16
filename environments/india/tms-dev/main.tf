@@ -53,7 +53,7 @@ module "db" {
   db_name               = "tms-dev-services-db"
 }
 
-# ---- 3. GKE cluster (private nodes) --------------------------------
+/*# ---- 3. GKE cluster (private nodes) --------------------------------
 # Runs inside the "tms-dev-private" subnet. Pod and Service IPs come
 # from the secondary ranges that india/host-dev already reserved
 # on that subnet ("tms-dev-pods" and "tms-dev-services").
@@ -87,7 +87,7 @@ module "gke" {
     region      = "india"
     managed_by  = "terraform"
   }
-}
+}*/
 
 # ---- 4. Secret Manager ----------------------------------------------
 # The Cloud SQL module (step 2) generates a random password and
