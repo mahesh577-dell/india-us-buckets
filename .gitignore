@@ -1,0 +1,19 @@
+# Terraform local state / cache (real state lives in GCS, per environment)
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+
+# Bootstrap uses local state per project - never commit these
+terraform/bootstrap/states/
+
+# Secrets - never commit service account keys
+*.pem
+*.key
+*-key.json
+circleci-key.json
+
+# OS files
+.DS_Store
+Thumbs.db

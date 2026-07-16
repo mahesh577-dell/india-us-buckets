@@ -1,0 +1,201 @@
+version: 2.1
+
+# =================================================================
+# STAGE 1 of 2 - has TWO jobs to do:
+#   1. Show a clean "Trigger Pipeline" form (region / environment /
+#      manual_trigger / run_bootstrap / bootstrap_env) - this file
+#      must declare these parameters for CircleCI's UI to auto-fill
+#      them as dropdowns/checkboxes.
+#   2. Detect which environment folder(s) changed via plain git diff
+#      (no 3rd-party orb - see note below), merge that with whatever
+#      you picked in the UI, and hand everything to
+#      .circleci/continue_config.yml, which has the real jobs.
+#
+# WHY NO path-filtering ORB:
+#   This repo previously used circleci/path-filtering. On 2026-07-14
+#   that orb started failing at its own "Set parameters" step with a
+#   Python 3.8/pip incompatibility coming from INSIDE the orb's own
+#   image - not from anything in this repo. This job is plain
+#   bash + jq + curl doing the exact same job instead.
+#
+# WHY continue_config.yml's PARAMETERS ARE NAMED "sel_region" etc,
+# NOT JUST "region":
+#   CircleCI locks in this file's own parameter names the moment you
+#   trigger the pipeline. If continue_config.yml tried to re-use the
+#   SAME names (region, environment, ...) in its continuation call,
+#   CircleCI rejects it with HTTP 409 "Conflicting pipeline
+#   parameters." Prefixing continue_config.yml's copies with "sel_"
+#   avoids that collision entirely.
+#
+# ONE-TIME SETUP REQUIRED (client / repo admin, do this once):
+#   CircleCI project -> Settings -> Advanced -> "Enable dynamic
+#   config using setup workflows" -> ON
+# Without that toggle, this file will not run and pushes will fail.
+# =================================================================
+
+setup: true
+
+parameters:
+  # ---- Shown as dropdowns/checkboxes in "Trigger Pipeline" ----
+  manual_trigger:
+    type: boolean
+    default: false
+  region:
+    type: enum
+    enum: [india, us]
+    default: india
+  environment:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+  run_bootstrap:
+    type: boolean
+    default: false
+  bootstrap_env:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+
+jobs:
+  detect-changes:
+    docker:
+      - image: cimg/base:2024.01
+    steps:
+      - checkout
+      - run:
+          name: Detect changed environments and continue the pipeline
+          command: |
+            set -euo pipefail
+
+            # jq ships in cimg/base, but install it if it's ever missing
+            command -v jq >/dev/null 2>&1 || (sudo apt-get update -qq && sudo apt-get install -y jq)
+
+            # ---- 1. Get the list of changed files for this push ----
+            if [ "$CIRCLE_BRANCH" = "main" ]; then
+              CHANGED=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || true)
+            else
+              git fetch origin main --depth=100 >/dev/null 2>&1 || true
+              CHANGED=$(git diff --name-only origin/main...HEAD 2>/dev/null || true)
+            fi
+            echo "Changed files in this push:"
+            echo "$CHANGED"
+            echo ""
+
+            # ---- 2. Map each environment folder to its parameter name ----
+            declare -A ENV_MAP=(
+              ["environments/india/host-dev/"]="run-india-host-dev"
+              ["environments/india/host-staging/"]="run-india-host-staging"
+              ["environments/india/host-prod/"]="run-india-host-prod"
+              ["environments/india/tms-dev/"]="run-india-tms-dev"
+              ["environments/india/vms-dev/"]="run-india-vms-dev"
+              ["environments/india/analytics-dev/"]="run-india-analytics-dev"
+              ["environments/india/tms-staging/"]="run-india-tms-staging"
+              ["environments/india/vms-staging/"]="run-india-vms-staging"
+              ["environments/india/tms-prod/"]="run-india-tms-prod"
+              ["environments/india/vms-prod/"]="run-india-vms-prod"
+              ["environments/india/analytics-prod/"]="run-india-analytics-prod"
+              ["environments/us/host-dev/"]="run-us-host-dev"
+              ["environments/us/host-staging/"]="run-us-host-staging"
+              ["environments/us/host-prod/"]="run-us-host-prod"
+              ["environments/us/tms-dev/"]="run-us-tms-dev"
+              ["environments/us/vms-dev/"]="run-us-vms-dev"
+              ["environments/us/analytics-dev/"]="run-us-analytics-dev"
+              ["environments/us/tms-staging/"]="run-us-tms-staging"
+              ["environments/us/vms-staging/"]="run-us-vms-staging"
+              ["environments/us/tms-prod/"]="run-us-tms-prod"
+              ["environments/us/vms-prod/"]="run-us-vms-prod"
+              ["environments/us/analytics-prod/"]="run-us-analytics-prod"
+            )
+
+            # ---- 3. Build the auto-detected booleans (one per env) ----
+            AUTO_JSON="{"
+            first=true
+            for path in "${!ENV_MAP[@]}"; do
+              key="${ENV_MAP[$path]}"
+              if echo "$CHANGED" | grep -q "^$path"; then
+                val=true
+                echo "  -> $key = true   (matched: $path)"
+              else
+                val=false
+              fi
+              if [ "$first" = true ]; then first=false; else AUTO_JSON="$AUTO_JSON,"; fi
+              AUTO_JSON="$AUTO_JSON\"$key\":$val"
+            done
+            AUTO_JSON="$AUTO_JSON}"
+
+            # ---- 4. Pull in whatever was picked on the Trigger Pipeline
+            #      form (these are substituted by CircleCI BEFORE this
+            #      shell script ever runs, so they're plain literals here).
+            #      Renamed to sel_* to avoid the parameter-name collision
+            #      explained at the top of this file. ----
+            MANUAL_JSON=$(jq -n \
+              --argjson sel_manual_trigger << pipeline.parameters.manual_trigger >> \
+              --arg sel_region "<< pipeline.parameters.region >>" \
+              --arg sel_environment "<< pipeline.parameters.environment >>" \
+              --argjson sel_run_bootstrap << pipeline.parameters.run_bootstrap >> \
+              --arg sel_bootstrap_env "<< pipeline.parameters.bootstrap_env >>" \
+              '{sel_manual_trigger:$sel_manual_trigger, sel_region:$sel_region, sel_environment:$sel_environment, sel_run_bootstrap:$sel_run_bootstrap, sel_bootstrap_env:$sel_bootstrap_env}')
+
+            # ---- 5. Merge manual params + auto-detected booleans ----
+            PARAMS_JSON=$(jq -n --argjson a "$MANUAL_JSON" --argjson b "$AUTO_JSON" '$a + $b')
+            echo ""
+            echo "Final parameters sent to continue_config.yml:"
+            echo "$PARAMS_JSON"
+
+            # ---- 6. Send continue_config.yml + parameters to CircleCI ----
+            # CIRCLE_CONTINUATION_KEY is provided automatically inside
+            # setup-workflow jobs - no separate API token needed.
+            jq -n \
+              --arg continuation "$CIRCLE_CONTINUATION_KEY" \
+              --rawfile config .circleci/continue_config.yml \
+              --argjson parameters "$PARAMS_JSON" \
+              '{"continuation-key": $continuation, "configuration": $config, "parameters": $parameters}' \
+              > /tmp/continue-body.json
+
+            HTTP_CODE=$(curl --silent --show-error --output /tmp/continue-response.json --write-out "%{http_code}" \
+              --request POST \
+              --url https://circleci.com/api/v2/pipeline/continue \
+              --header "Content-Type: application/json" \
+              --data @/tmp/continue-body.json)
+
+            echo ""
+            echo "Continuation API responded: HTTP $HTTP_CODE"
+            cat /tmp/continue-response.json
+            echo ""
+
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Continuation submitted - see the 'continue_config.yml' workflows below."
+            elif [ "$HTTP_CODE" = "409" ]; then
+              echo "409 Conflict: this pipeline was likely already continued by an earlier retry of this same step."
+              echo "Check the Pipeline page for a workflow that isn't 'detect-changed-environments' - it probably already ran."
+            else
+              echo "Unexpected response from continuation API - failing this job."
+              exit 1
+            fi
+
+workflows:
+  detect-changed-environments:
+    jobs:
+      - detect-changes

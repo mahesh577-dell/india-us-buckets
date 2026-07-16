@@ -1,0 +1,1050 @@
+version: 2.1
+
+# =================================================================
+# STAGE 2 of 2 - this is where the real work happens.
+#
+# This file never runs by itself - .circleci/config.yml (stage 1)
+# always runs first, decides which environment(s) changed, and then
+# hands off to this file. See the comment at the top of config.yml
+# for the full picture.
+#
+# NOTE ON PARAMETER NAMES: everything below is prefixed "sel_"
+# (sel_region, sel_environment, ...). That's deliberate - see the
+# note near the top of config.yml explaining why this file can't
+# reuse config.yml's parameter names directly.
+#
+# THREE WAYS THIS FILE GETS USED:
+#
+#  A) AUTOMATIC (on every push) - stage 1 detected that files under
+#     environments/<region>/<env>/ changed, so it set a matching
+#     boolean parameter (e.g. run-india-tms-dev) to true. That
+#     environment's workflow below runs by itself - no clicking
+#     needed. If you change files in 2 different environments in one
+#     push, BOTH of their workflows run side by side.
+#
+#  B) MANUAL, single environment - open CircleCI -> "Trigger
+#     Pipeline" -> set:
+#       manual_trigger = true
+#       region         = india (or us)
+#       environment    = tms-dev (or any other)
+#     -> runs validate/plan/apply for exactly that one environment,
+#     regardless of what files changed.
+#
+#  C) MANUAL, bootstrap a project - "Trigger Pipeline" -> set:
+#       run_bootstrap = true
+#       region        = india (or us)
+#       bootstrap_env = tms-dev (or any other)
+#     -> one-time setup for that project: enables its APIs, creates
+#     its state bucket, creates its dedicated service account.
+#     See README.md "Bootstrap" section before you use this.
+#
+# WHY MOST FILES HERE END IN /main.tf, /variables.tf etc:
+#     Every job below just does `cd environments/<region>/<env>` and
+#     runs plain `terraform init/plan/apply` - there is no magic.
+#     If you can run terraform by hand, you can read every step here.
+# =================================================================
+
+parameters:
+  # ---- Passthrough from config.yml --------------------------------
+  # CircleCI automatically forwards the original trigger parameters
+  # to the continued pipeline. These are declared here ONLY to
+  # prevent "Unexpected argument" rejection - they are never used
+  # in any job or workflow below.
+  manual_trigger:
+    type: boolean
+    default: false
+  region:
+    type: enum
+    enum: [india, us]
+    default: india
+  environment:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+  run_bootstrap:
+    type: boolean
+    default: false
+  bootstrap_env:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+
+  # ---- Manual, single-environment trigger (see use case B above) ----
+  sel_manual_trigger:
+    type: boolean
+    default: false
+  sel_region:
+    type: enum
+    enum: [india, us]
+    default: india
+  sel_environment:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+
+  # ---- Manual bootstrap trigger (see use case C above) ----
+  sel_run_bootstrap:
+    type: boolean
+    default: false
+  sel_bootstrap_env:
+    type: enum
+    enum:
+      - host-dev
+      - host-staging
+      - host-prod
+      - tms-dev
+      - vms-dev
+      - analytics-dev
+      - tms-staging
+      - vms-staging
+      - tms-prod
+      - vms-prod
+      - analytics-prod
+    default: host-dev
+
+  # ---- Automatic, one boolean per environment (see use case A) ----
+  # stage 1 (config.yml) flips these to true based on changed files.
+  # You never need to set these by hand.
+  run-india-host-dev:
+    type: boolean
+    default: false
+  run-india-host-staging:
+    type: boolean
+    default: false
+  run-india-host-prod:
+    type: boolean
+    default: false
+  run-india-tms-dev:
+    type: boolean
+    default: false
+  run-india-vms-dev:
+    type: boolean
+    default: false
+  run-india-analytics-dev:
+    type: boolean
+    default: false
+  run-india-tms-staging:
+    type: boolean
+    default: false
+  run-india-vms-staging:
+    type: boolean
+    default: false
+  run-india-tms-prod:
+    type: boolean
+    default: false
+  run-india-vms-prod:
+    type: boolean
+    default: false
+  run-india-analytics-prod:
+    type: boolean
+    default: false
+  run-us-host-dev:
+    type: boolean
+    default: false
+  run-us-host-staging:
+    type: boolean
+    default: false
+  run-us-host-prod:
+    type: boolean
+    default: false
+  run-us-tms-dev:
+    type: boolean
+    default: false
+  run-us-vms-dev:
+    type: boolean
+    default: false
+  run-us-analytics-dev:
+    type: boolean
+    default: false
+  run-us-tms-staging:
+    type: boolean
+    default: false
+  run-us-vms-staging:
+    type: boolean
+    default: false
+  run-us-tms-prod:
+    type: boolean
+    default: false
+  run-us-vms-prod:
+    type: boolean
+    default: false
+  run-us-analytics-prod:
+    type: boolean
+    default: false
+
+executors:
+  tf-executor:
+    docker:
+      - image: hashicorp/terraform:1.9.0
+    working_directory: ~/project
+    environment:
+      TF_CLI_ARGS: "-no-color"
+      GOOGLE_APPLICATION_CREDENTIALS: /tmp/gcp-key.json
+
+commands:
+  setup-gcp:
+    steps:
+      - run:
+          name: Load GCP service account key
+          command: printf '%s' "$GOOGLE_CREDENTIALS" > /tmp/gcp-key.json
+
+jobs:
+  # ---- Reusable jobs, called once per environment with different
+  #      "env_path" / "context_name" values. This is the ONLY place
+  #      terraform commands actually live. ----
+  validate:
+    executor: tf-executor
+    parameters:
+      env_path: { type: string }
+    steps:
+      - checkout
+      - setup-gcp
+      - run:
+          name: "terraform init - << parameters.env_path >>"
+          command: |
+            cd environments/<< parameters.env_path >>
+            terraform init -input=false
+      - run:
+          name: terraform fmt -check (whole repo)
+          command: terraform fmt -check -recursive
+      - run:
+          name: "terraform validate - << parameters.env_path >>"
+          command: |
+            cd environments/<< parameters.env_path >>
+            terraform validate
+
+  plan:
+    executor: tf-executor
+    parameters:
+      env_path: { type: string }
+    steps:
+      - checkout
+      - setup-gcp
+      - run:
+          name: "terraform init - << parameters.env_path >>"
+          command: |
+            cd environments/<< parameters.env_path >>
+            terraform init -input=false
+      - run:
+          name: "terraform plan - << parameters.env_path >>"
+          command: |
+            cd environments/<< parameters.env_path >>
+            terraform plan -var-file="terraform.tfvars" -out=tfplan -input=false
+      - run:
+          name: Show plan (read this before approving!)
+          command: |
+            cd environments/<< parameters.env_path >>
+            terraform show -no-color tfplan
+      - persist_to_workspace:
+          root: .
+          paths:
+            - environments/<< parameters.env_path >>/tfplan
+            - environments/<< parameters.env_path >>/.terraform
+            - environments/<< parameters.env_path >>/.terraform.lock.hcl
+
+  apply:
+    executor: tf-executor
+    parameters:
+      env_path: { type: string }
+    steps:
+      - checkout
+      - setup-gcp
+      - attach_workspace:
+          at: .
+      - run:
+          name: "terraform apply - << parameters.env_path >>"
+          command: |
+            cd environments/<< parameters.env_path >>
+            terraform apply -auto-approve -input=false tfplan
+      - run:
+          name: Show outputs
+          command: |
+            cd environments/<< parameters.env_path >>
+            terraform output
+
+  bootstrap:
+    executor: tf-executor
+    steps:
+      - checkout
+      - setup-gcp
+      - run:
+          name: "Bootstrap plan - << pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>"
+          command: |
+            cd terraform/bootstrap
+            mkdir -p states
+            terraform init -input=false
+            terraform plan \
+              -state="states/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfstate" \
+              -var-file="projects/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfvars" \
+              -input=false
+      - run:
+          name: "Bootstrap apply - << pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>"
+          command: |
+            cd terraform/bootstrap
+            terraform apply \
+              -state="states/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfstate" \
+              -var-file="projects/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfvars" \
+              -input=false -auto-approve
+      - run:
+          name: Show outputs (SA email + suggested context name)
+          command: |
+            cd terraform/bootstrap
+            terraform output -state="states/<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>.tfstate"
+            echo ""
+            echo "NEXT STEP: create a JSON key for the SA shown above, then"
+            echo "add it as GOOGLE_CREDENTIALS in CircleCI context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_bootstrap_env >>"
+
+workflows:
+  bootstrap-one-project:
+    when: << pipeline.parameters.sel_run_bootstrap >>
+    jobs:
+      - hold-before-bootstrap:
+          type: approval
+      - bootstrap:
+          context: gcp-bootstrap
+          requires: [hold-before-bootstrap]
+
+  manual-single-environment:
+    when:
+      and:
+        - << pipeline.parameters.sel_manual_trigger >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+    jobs:
+      - validate:
+          name: manual-validate
+          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
+      - plan:
+          name: manual-plan
+          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
+          requires: [manual-validate]
+      - hold-manual-approval:
+          type: approval
+          requires: [manual-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: manual-apply
+          env_path: "<< pipeline.parameters.sel_region >>/<< pipeline.parameters.sel_environment >>"
+          context: gcp-<< pipeline.parameters.sel_region >>-<< pipeline.parameters.sel_environment >>
+          requires: [hold-manual-approval]
+          filters:
+            branches:
+              only: main
+
+  auto-india-host-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-india-host-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-host-dev-validate
+          env_path: "india/host-dev"
+          context: gcp-india-host-dev
+      - plan:
+          name: india-host-dev-plan
+          env_path: "india/host-dev"
+          context: gcp-india-host-dev
+          requires: [india-host-dev-validate]
+      - hold-india-host-dev:
+          type: approval
+          requires: [india-host-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-host-dev-apply
+          env_path: "india/host-dev"
+          context: gcp-india-host-dev
+          requires: [hold-india-host-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-india-host-staging:
+    when:
+      and:
+        - << pipeline.parameters.run-india-host-staging >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-host-staging-validate
+          env_path: "india/host-staging"
+          context: gcp-india-host-staging
+      - plan:
+          name: india-host-staging-plan
+          env_path: "india/host-staging"
+          context: gcp-india-host-staging
+          requires: [india-host-staging-validate]
+      - hold-india-host-staging:
+          type: approval
+          requires: [india-host-staging-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-host-staging-apply
+          env_path: "india/host-staging"
+          context: gcp-india-host-staging
+          requires: [hold-india-host-staging]
+          filters:
+            branches:
+              only: main
+
+  auto-india-host-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-india-host-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-host-prod-validate
+          env_path: "india/host-prod"
+          context: gcp-india-host-prod
+      - plan:
+          name: india-host-prod-plan
+          env_path: "india/host-prod"
+          context: gcp-india-host-prod
+          requires: [india-host-prod-validate]
+      - hold-india-host-prod:
+          type: approval
+          requires: [india-host-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-host-prod-apply
+          env_path: "india/host-prod"
+          context: gcp-india-host-prod
+          requires: [hold-india-host-prod]
+          filters:
+            branches:
+              only: main
+
+  auto-india-tms-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-india-tms-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-tms-dev-validate
+          env_path: "india/tms-dev"
+          context: gcp-india-tms-dev
+      - plan:
+          name: india-tms-dev-plan
+          env_path: "india/tms-dev"
+          context: gcp-india-tms-dev
+          requires: [india-tms-dev-validate]
+      - hold-india-tms-dev:
+          type: approval
+          requires: [india-tms-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-tms-dev-apply
+          env_path: "india/tms-dev"
+          context: gcp-india-tms-dev
+          requires: [hold-india-tms-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-india-vms-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-india-vms-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-vms-dev-validate
+          env_path: "india/vms-dev"
+          context: gcp-india-vms-dev
+      - plan:
+          name: india-vms-dev-plan
+          env_path: "india/vms-dev"
+          context: gcp-india-vms-dev
+          requires: [india-vms-dev-validate]
+      - hold-india-vms-dev:
+          type: approval
+          requires: [india-vms-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-vms-dev-apply
+          env_path: "india/vms-dev"
+          context: gcp-india-vms-dev
+          requires: [hold-india-vms-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-india-analytics-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-india-analytics-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-analytics-dev-validate
+          env_path: "india/analytics-dev"
+          context: gcp-india-analytics-dev
+      - plan:
+          name: india-analytics-dev-plan
+          env_path: "india/analytics-dev"
+          context: gcp-india-analytics-dev
+          requires: [india-analytics-dev-validate]
+      - hold-india-analytics-dev:
+          type: approval
+          requires: [india-analytics-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-analytics-dev-apply
+          env_path: "india/analytics-dev"
+          context: gcp-india-analytics-dev
+          requires: [hold-india-analytics-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-india-tms-staging:
+    when:
+      and:
+        - << pipeline.parameters.run-india-tms-staging >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-tms-staging-validate
+          env_path: "india/tms-staging"
+          context: gcp-india-tms-staging
+      - plan:
+          name: india-tms-staging-plan
+          env_path: "india/tms-staging"
+          context: gcp-india-tms-staging
+          requires: [india-tms-staging-validate]
+      - hold-india-tms-staging:
+          type: approval
+          requires: [india-tms-staging-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-tms-staging-apply
+          env_path: "india/tms-staging"
+          context: gcp-india-tms-staging
+          requires: [hold-india-tms-staging]
+          filters:
+            branches:
+              only: main
+
+  auto-india-vms-staging:
+    when:
+      and:
+        - << pipeline.parameters.run-india-vms-staging >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-vms-staging-validate
+          env_path: "india/vms-staging"
+          context: gcp-india-vms-staging
+      - plan:
+          name: india-vms-staging-plan
+          env_path: "india/vms-staging"
+          context: gcp-india-vms-staging
+          requires: [india-vms-staging-validate]
+      - hold-india-vms-staging:
+          type: approval
+          requires: [india-vms-staging-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-vms-staging-apply
+          env_path: "india/vms-staging"
+          context: gcp-india-vms-staging
+          requires: [hold-india-vms-staging]
+          filters:
+            branches:
+              only: main
+
+  auto-india-tms-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-india-tms-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-tms-prod-validate
+          env_path: "india/tms-prod"
+          context: gcp-india-tms-prod
+      - plan:
+          name: india-tms-prod-plan
+          env_path: "india/tms-prod"
+          context: gcp-india-tms-prod
+          requires: [india-tms-prod-validate]
+      - hold-india-tms-prod:
+          type: approval
+          requires: [india-tms-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-tms-prod-apply
+          env_path: "india/tms-prod"
+          context: gcp-india-tms-prod
+          requires: [hold-india-tms-prod]
+          filters:
+            branches:
+              only: main
+
+  auto-india-vms-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-india-vms-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-vms-prod-validate
+          env_path: "india/vms-prod"
+          context: gcp-india-vms-prod
+      - plan:
+          name: india-vms-prod-plan
+          env_path: "india/vms-prod"
+          context: gcp-india-vms-prod
+          requires: [india-vms-prod-validate]
+      - hold-india-vms-prod:
+          type: approval
+          requires: [india-vms-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-vms-prod-apply
+          env_path: "india/vms-prod"
+          context: gcp-india-vms-prod
+          requires: [hold-india-vms-prod]
+          filters:
+            branches:
+              only: main
+
+  auto-india-analytics-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-india-analytics-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: india-analytics-prod-validate
+          env_path: "india/analytics-prod"
+          context: gcp-india-analytics-prod
+      - plan:
+          name: india-analytics-prod-plan
+          env_path: "india/analytics-prod"
+          context: gcp-india-analytics-prod
+          requires: [india-analytics-prod-validate]
+      - hold-india-analytics-prod:
+          type: approval
+          requires: [india-analytics-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: india-analytics-prod-apply
+          env_path: "india/analytics-prod"
+          context: gcp-india-analytics-prod
+          requires: [hold-india-analytics-prod]
+          filters:
+            branches:
+              only: main
+
+  auto-us-host-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-us-host-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-host-dev-validate
+          env_path: "us/host-dev"
+          context: gcp-us-host-dev
+      - plan:
+          name: us-host-dev-plan
+          env_path: "us/host-dev"
+          context: gcp-us-host-dev
+          requires: [us-host-dev-validate]
+      - hold-us-host-dev:
+          type: approval
+          requires: [us-host-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-host-dev-apply
+          env_path: "us/host-dev"
+          context: gcp-us-host-dev
+          requires: [hold-us-host-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-us-host-staging:
+    when:
+      and:
+        - << pipeline.parameters.run-us-host-staging >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-host-staging-validate
+          env_path: "us/host-staging"
+          context: gcp-us-host-staging
+      - plan:
+          name: us-host-staging-plan
+          env_path: "us/host-staging"
+          context: gcp-us-host-staging
+          requires: [us-host-staging-validate]
+      - hold-us-host-staging:
+          type: approval
+          requires: [us-host-staging-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-host-staging-apply
+          env_path: "us/host-staging"
+          context: gcp-us-host-staging
+          requires: [hold-us-host-staging]
+          filters:
+            branches:
+              only: main
+
+  auto-us-host-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-us-host-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-host-prod-validate
+          env_path: "us/host-prod"
+          context: gcp-us-host-prod
+      - plan:
+          name: us-host-prod-plan
+          env_path: "us/host-prod"
+          context: gcp-us-host-prod
+          requires: [us-host-prod-validate]
+      - hold-us-host-prod:
+          type: approval
+          requires: [us-host-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-host-prod-apply
+          env_path: "us/host-prod"
+          context: gcp-us-host-prod
+          requires: [hold-us-host-prod]
+          filters:
+            branches:
+              only: main
+
+  auto-us-tms-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-us-tms-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-tms-dev-validate
+          env_path: "us/tms-dev"
+          context: gcp-us-tms-dev
+      - plan:
+          name: us-tms-dev-plan
+          env_path: "us/tms-dev"
+          context: gcp-us-tms-dev
+          requires: [us-tms-dev-validate]
+      - hold-us-tms-dev:
+          type: approval
+          requires: [us-tms-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-tms-dev-apply
+          env_path: "us/tms-dev"
+          context: gcp-us-tms-dev
+          requires: [hold-us-tms-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-us-vms-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-us-vms-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-vms-dev-validate
+          env_path: "us/vms-dev"
+          context: gcp-us-vms-dev
+      - plan:
+          name: us-vms-dev-plan
+          env_path: "us/vms-dev"
+          context: gcp-us-vms-dev
+          requires: [us-vms-dev-validate]
+      - hold-us-vms-dev:
+          type: approval
+          requires: [us-vms-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-vms-dev-apply
+          env_path: "us/vms-dev"
+          context: gcp-us-vms-dev
+          requires: [hold-us-vms-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-us-analytics-dev:
+    when:
+      and:
+        - << pipeline.parameters.run-us-analytics-dev >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-analytics-dev-validate
+          env_path: "us/analytics-dev"
+          context: gcp-us-analytics-dev
+      - plan:
+          name: us-analytics-dev-plan
+          env_path: "us/analytics-dev"
+          context: gcp-us-analytics-dev
+          requires: [us-analytics-dev-validate]
+      - hold-us-analytics-dev:
+          type: approval
+          requires: [us-analytics-dev-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-analytics-dev-apply
+          env_path: "us/analytics-dev"
+          context: gcp-us-analytics-dev
+          requires: [hold-us-analytics-dev]
+          filters:
+            branches:
+              only: main
+
+  auto-us-tms-staging:
+    when:
+      and:
+        - << pipeline.parameters.run-us-tms-staging >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-tms-staging-validate
+          env_path: "us/tms-staging"
+          context: gcp-us-tms-staging
+      - plan:
+          name: us-tms-staging-plan
+          env_path: "us/tms-staging"
+          context: gcp-us-tms-staging
+          requires: [us-tms-staging-validate]
+      - hold-us-tms-staging:
+          type: approval
+          requires: [us-tms-staging-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-tms-staging-apply
+          env_path: "us/tms-staging"
+          context: gcp-us-tms-staging
+          requires: [hold-us-tms-staging]
+          filters:
+            branches:
+              only: main
+
+  auto-us-vms-staging:
+    when:
+      and:
+        - << pipeline.parameters.run-us-vms-staging >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-vms-staging-validate
+          env_path: "us/vms-staging"
+          context: gcp-us-vms-staging
+      - plan:
+          name: us-vms-staging-plan
+          env_path: "us/vms-staging"
+          context: gcp-us-vms-staging
+          requires: [us-vms-staging-validate]
+      - hold-us-vms-staging:
+          type: approval
+          requires: [us-vms-staging-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-vms-staging-apply
+          env_path: "us/vms-staging"
+          context: gcp-us-vms-staging
+          requires: [hold-us-vms-staging]
+          filters:
+            branches:
+              only: main
+
+  auto-us-tms-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-us-tms-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-tms-prod-validate
+          env_path: "us/tms-prod"
+          context: gcp-us-tms-prod
+      - plan:
+          name: us-tms-prod-plan
+          env_path: "us/tms-prod"
+          context: gcp-us-tms-prod
+          requires: [us-tms-prod-validate]
+      - hold-us-tms-prod:
+          type: approval
+          requires: [us-tms-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-tms-prod-apply
+          env_path: "us/tms-prod"
+          context: gcp-us-tms-prod
+          requires: [hold-us-tms-prod]
+          filters:
+            branches:
+              only: main
+
+  auto-us-vms-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-us-vms-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-vms-prod-validate
+          env_path: "us/vms-prod"
+          context: gcp-us-vms-prod
+      - plan:
+          name: us-vms-prod-plan
+          env_path: "us/vms-prod"
+          context: gcp-us-vms-prod
+          requires: [us-vms-prod-validate]
+      - hold-us-vms-prod:
+          type: approval
+          requires: [us-vms-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-vms-prod-apply
+          env_path: "us/vms-prod"
+          context: gcp-us-vms-prod
+          requires: [hold-us-vms-prod]
+          filters:
+            branches:
+              only: main
+
+  auto-us-analytics-prod:
+    when:
+      and:
+        - << pipeline.parameters.run-us-analytics-prod >>
+        - not: << pipeline.parameters.sel_run_bootstrap >>
+        - not: << pipeline.parameters.sel_manual_trigger >>
+    jobs:
+      - validate:
+          name: us-analytics-prod-validate
+          env_path: "us/analytics-prod"
+          context: gcp-us-analytics-prod
+      - plan:
+          name: us-analytics-prod-plan
+          env_path: "us/analytics-prod"
+          context: gcp-us-analytics-prod
+          requires: [us-analytics-prod-validate]
+      - hold-us-analytics-prod:
+          type: approval
+          requires: [us-analytics-prod-plan]
+          filters:
+            branches:
+              only: main
+      - apply:
+          name: us-analytics-prod-apply
+          env_path: "us/analytics-prod"
+          context: gcp-us-analytics-prod
+          requires: [hold-us-analytics-prod]
+          filters:
+            branches:
+              only: main
