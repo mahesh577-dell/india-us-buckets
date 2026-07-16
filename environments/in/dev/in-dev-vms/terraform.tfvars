@@ -1,7 +1,7 @@
 # Values below came from the "in-*" projects the client already
 # created (see host_project_id / host_vpc_id / host_subnet_self_link
 # in the output of `terraform apply` inside environments/in/dev/network/in-dev-network).
-project_id      = "vms-dev-501607" # in-vms-dev
+project_id      = "ccd-poc-project" # in-vms-dev
 region          = "asia-south1"
 host_project_id = "host-dev-network" # in-host-dev-network
 
