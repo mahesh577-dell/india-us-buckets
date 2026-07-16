@@ -1,4 +1,4 @@
-output "cloud_sql_instance" {
+/*output "cloud_sql_instance" {
   value = module.db.instance_name
 }
 
@@ -18,4 +18,4 @@ output "gke_cluster_name" {
 output "gke_get_credentials_command" {
   description = "Run this to point kubectl at the new cluster"
   value       = module.gke.get_credentials_command
-}
+}*/
