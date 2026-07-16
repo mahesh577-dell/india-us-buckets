@@ -15,7 +15,9 @@ module "data_science_test_bucket" {
 
   project_id  = var.project_id
   region      = var.region
-  bucket_name = "analytics-dev-mumbai-data-science-test"
+  bucket_name = "mumbai-data-science-test"
+
+  versioning_enabled = true
 
   labels = {
     environment = "dev"

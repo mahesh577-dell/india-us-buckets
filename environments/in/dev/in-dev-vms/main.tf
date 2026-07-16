@@ -119,7 +119,9 @@ module "email_ingestion_bucket" {
 
   project_id  = var.project_id
   region      = var.region
-  bucket_name = "vms-dev-atlas-dev-aps1-email-ingestion"
+  bucket_name = "atlas-dev-aps1-email-ingestion"
+
+  versioning_enabled = true
 
   labels = {
     environment = "dev"

@@ -120,11 +120,9 @@ module "alb_logs_bucket" {
 
   project_id  = var.project_id
   region      = var.region
-  bucket_name = "tms-dev-ff-dev-alb-logs"
+  bucket_name = "ff-dev-alb-logs"
 
-  # Access logs pile up fast and are rarely needed past 90 days -
-  # auto-delete keeps cost down. Adjust if compliance needs longer.
-  lifecycle_age_days = 90
+  versioning_enabled = true
 
   labels = {
     environment = "dev"
@@ -140,7 +138,9 @@ module "codebuild_bucket" {
 
   project_id  = var.project_id
   region      = var.region
-  bucket_name = "tms-dev-kannan-ff-codebuild-bucket"
+  bucket_name = "kannan-ff-codebuild-bucket"
+
+  versioning_enabled = true
 
   labels = {
     environment = "dev"
@@ -156,7 +156,7 @@ module "tsp_onboarding_documents_bucket" {
 
   project_id  = var.project_id
   region      = var.region
-  bucket_name = "tms-dev-mumbai-ffox-tsp-onboarding-documents-v1-poc"
+  bucket_name = "mumbai-ffox-tsp-onboarding-documents-v1-poc"
 
   # Onboarding documents can include sensitive TSP paperwork - keep
   # object versioning on so an accidental overwrite/delete is
