@@ -2,10 +2,10 @@
 # ===============================================================
 # Bootstrap Runner - per project via parameters
 # USAGE:
-#   ./run_bootstrap.sh india-host-dev          -> one project
-#   ./run_bootstrap.sh india-host-dev plan     -> plan only
-#   ./run_bootstrap.sh india                   -> all india projects
-#   ./run_bootstrap.sh us                      -> all us projects
+#   ./run_bootstrap.sh in-dev-network          -> one project
+#   ./run_bootstrap.sh in-dev-network plan     -> plan only
+#   ./run_bootstrap.sh in                      -> all in-* projects
+#   ./run_bootstrap.sh us                      -> all us-* projects
 #   ./run_bootstrap.sh all                     -> all 22 projects
 # ===============================================================
 set -euo pipefail
@@ -13,7 +13,7 @@ set -euo pipefail
 ENV="${1:-}"
 ACTION="${2:-apply}"
 
-ALL_ENVS=(india-host-dev india-host-staging india-host-prod india-tms-dev india-vms-dev india-analytics-dev india-tms-staging india-vms-staging india-tms-prod india-vms-prod india-analytics-prod us-host-dev us-host-staging us-host-prod us-tms-dev us-vms-dev us-analytics-dev us-tms-staging us-vms-staging us-tms-prod us-vms-prod us-analytics-prod)
+ALL_ENVS=(in-dev-network in-staging-network in-prod-network in-dev-tms in-dev-vms in-dev-analytics in-staging-tms in-staging-vms in-prod-tms in-prod-vms in-prod-analytics us-dev-network us-staging-network us-prod-network us-dev-tms us-dev-vms us-dev-analytics us-staging-tms us-staging-vms us-prod-tms us-prod-vms us-prod-analytics)
 
 mkdir -p states
 
@@ -33,11 +33,11 @@ run_one() {
 }
 
 case "$ENV" in
-  "") echo "Usage: ./run_bootstrap.sh <env|india|us|all> [plan|apply]"; echo "Envs: ${ALL_ENVS[*]}"; exit 1 ;;
-  all)   for e in "${ALL_ENVS[@]}"; do run_one "$e"; done ;;
-  india) for e in "${ALL_ENVS[@]}"; do [[ "$e" == india-* ]] && run_one "$e"; done ;;
-  us)    for e in "${ALL_ENVS[@]}"; do [[ "$e" == us-* ]] && run_one "$e"; done ;;
-  *)     run_one "$ENV" ;;
+  "") echo "Usage: ./run_bootstrap.sh <env|in|us|all> [plan|apply]"; echo "Envs: ${ALL_ENVS[*]}"; exit 1 ;;
+  all) for e in "${ALL_ENVS[@]}"; do run_one "$e"; done ;;
+  in)  for e in "${ALL_ENVS[@]}"; do [[ "$e" == in-* ]] && run_one "$e"; done ;;
+  us)  for e in "${ALL_ENVS[@]}"; do [[ "$e" == us-* ]] && run_one "$e"; done ;;
+  *)   run_one "$ENV" ;;
 esac
 
 echo ""

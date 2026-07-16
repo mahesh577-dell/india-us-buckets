@@ -12,10 +12,10 @@ one section relevant to what you're doing that day.
 Two regions, three tiers each = **6 Shared VPCs**:
 
 ```
-in/                                       us/
-├── dev/in-host-dev-network      → india-dev-vpc     ├── dev/us-host-dev-network      → us-dev-vpc
-├── staging/in-host-staging-network → india-staging-vpc ├── staging/us-host-staging-network → us-staging-vpc
-└── prod/in-host-prod-network    → india-prod-vpc     └── prod/us-host-prod-network    → us-prod-vpc
+in/                                              us/
+├── dev/network/in-dev-network      → india-dev-vpc     ├── dev/network/us-dev-network      → us-dev-vpc
+├── staging/network/in-staging-network → india-staging-vpc ├── staging/network/us-staging-network → us-staging-vpc
+└── prod/network/in-prod-network    → india-prod-vpc     └── prod/network/us-prod-network    → us-prod-vpc
 ```
 
 Each **host** environment owns a VPC and its subnets, then "shares" those
@@ -23,10 +23,10 @@ subnets with **service** projects (Shared VPC / XPN — this is how GCP
 lets multiple projects use one network without giving up isolation).
 
 ```
-in/dev/in-host-dev-network owns india-dev-vpc, and shares it with:
-  in/dev/in-tms-dev        (in-tms-dev project)        → Cloud SQL + GKE
-  in/dev/in-vms-dev        (in-vms-dev project)         → Cloud SQL + GKE
-  in/dev/in-analytics-dev  (in-analytics-dev project)   → Dataflow/BigQuery (no GKE cluster)
+in/dev/network/in-dev-network owns india-dev-vpc, and shares it with:
+  in/dev/in-dev-tms        (in-tms-dev project)        → Cloud SQL + GKE
+  in/dev/in-dev-vms        (in-vms-dev project)         → Cloud SQL + GKE
+  in/dev/in-dev-analytics  (in-analytics-dev project)   → Dataflow/BigQuery (no GKE cluster)
 ```
 
 The **us/** side is the exact same pattern, just a different region
@@ -64,7 +64,7 @@ titan-terraform/
 │   └── continue_config.yml   ← stage 2: the real jobs/workflows
 ├── terraform/bootstrap/       ← one-time setup, run once per project
 │   ├── main.tf                (enables APIs, creates state bucket + SA)
-│   ├── run_bootstrap.sh        ./run_bootstrap.sh india-tms-dev | all
+│   ├── run_bootstrap.sh        ./run_bootstrap.sh in-dev-tms | all
 │   └── projects/*.tfvars       one file per project (22 total)
 ├── modules/
 │   ├── networking/
@@ -76,9 +76,9 @@ titan-terraform/
 │   └── security/secret-manager/ stores the generated DB password
 └── environments/
     ├── in/
-    │   ├── dev/      in-host-dev-network/  in-tms-dev/  in-vms-dev/  in-analytics-dev/
-    │   ├── staging/  in-host-staging-network/  in-tms-staging/  in-vms-staging/
-    │   └── prod/     in-host-prod-network/  in-tms-prod/  in-vms-prod/  in-analytics-prod/
+    │   ├── dev/      network/in-dev-network/  in-dev-tms/  in-dev-vms/  in-dev-analytics/
+    │   ├── staging/  network/in-staging-network/  in-staging-tms/  in-staging-vms/
+    │   └── prod/     network/in-prod-network/  in-prod-tms/  in-prod-vms/  in-prod-analytics/
     └── us/  (identical shape to in/, us-* prefixed dirs)
 ```
 
@@ -97,10 +97,10 @@ read all 22 — nothing is "special-cased".
 - Workload Identity turned on (so pods can call GCP APIs safely,
   without long-lived service account keys stored in the cluster)
 
-It is wired into 4 environments today — `in/dev/in-tms-dev`,
-`in/dev/in-vms-dev`, `us/dev/us-tms-dev`, `us/dev/us-vms-dev` — right
+It is wired into 4 environments today — `in/dev/in-dev-tms`,
+`in/dev/in-dev-vms`, `us/dev/us-dev-tms`, `us/dev/us-dev-vms` — right
 next to the Cloud SQL module that was already there. Open
-`environments/in/dev/in-tms-dev/main.tf` and read it top to bottom; it's
+`environments/in/dev/in-dev-tms/main.tf` and read it top to bottom; it's
 commented step-by-step and is the template to copy for staging/prod or
 for `vms`/`analytics` later.
 
@@ -140,8 +140,8 @@ actual `terraform plan`/`apply`.
  .circleci/config.yml  (stage 1 — "detect changes")
       │
       │ looks at which files changed vs main, e.g.:
-      │   environments/in/dev/in-tms-dev/main.tf   changed
-      │   environments/us/dev/us-vms-dev/terraform.tfvars  changed
+      │   environments/in/dev/in-dev-tms/main.tf   changed
+      │   environments/us/dev/us-dev-vms/terraform.tfvars  changed
       │
       ▼
  sets pipeline parameters:
@@ -228,7 +228,7 @@ Every environment's `backend.tf` points at a bucket that lives inside
 *that project*, e.g.:
 
 ```hcl
-# environments/in/dev/in-tms-dev/backend.tf
+# environments/in/dev/in-dev-tms/backend.tf
 backend "gcs" {
   bucket = "freightfox-tfstate-india-tms-dev"
   prefix = "terraform/state"
@@ -236,7 +236,7 @@ backend "gcs" {
 ```
 
 The bucket is created by that same project's bootstrap run (see
-`terraform/bootstrap/projects/india-tms-dev.tfvars`). Nothing is
+`terraform/bootstrap/projects/in-dev-tms.tfvars`). Nothing is
 shared between projects' state — a mistake in one environment's state
 can never corrupt another's.
 
@@ -266,7 +266,7 @@ below for the one thing to still run yourself):
 once yourself (needs real credentials, which this sandbox doesn't
 have):
 ```bash
-cd environments/in/dev/in-host-dev-network
+cd environments/in/dev/network/in-dev-network
 terraform init -backend=false
 terraform validate
 ```
@@ -300,7 +300,7 @@ walk.
    → approve → apply
 
 5. Copy the 3 output values (vpc_self_link, subnet_self_links) into
-   environments/in/dev/in-tms-dev/terraform.tfvars (and vms-dev,
+   environments/in/dev/in-dev-tms/terraform.tfvars (and vms-dev,
    analytics-dev) — replacing the REPLACE_WITH_* placeholders.
 
 6. Deploy tms-dev / vms-dev / analytics-dev the same way.
