@@ -118,13 +118,16 @@ resource "google_project_iam_member" "circleci_storage" {
 }
 
 # ── 4. OPTIONAL: Grant host project network access ────────────
-# Service projects need their SA to have networkUser on HOST
-# project to deploy into shared VPC subnets.
+# Service projects need their SA to manage network resources on the
+# HOST project: attach to shared VPC subnets (compute.networks.use,
+# via networkUser) AND create the Private Service Access peering
+# range for Cloud SQL (compute.globalAddresses.createInternal, only
+# in networkAdmin - networkUser alone isn't enough for that).
 # Pass host_project_id for service/analytics projects.
-resource "google_project_iam_member" "network_user_on_host" {
+resource "google_project_iam_member" "network_admin_on_host" {
   count = var.host_project_id != "" ? 1 : 0
 
   project = var.host_project_id
-  role    = "roles/compute.networkUser"
+  role    = "roles/compute.networkAdmin"
   member  = "serviceAccount:${google_service_account.circleci.email}"
 }
