@@ -24,25 +24,25 @@
 # another service in the same host VPC already created it, Terraform
 # will show an error like "already exists" and you can safely remove
 # this resource for that service and re-use the existing one instead.
-resource "google_compute_global_address" "private_ip_alloc" {
+/*resource "google_compute_global_address" "private_ip_alloc" {
   name          = "india-vms-dev-private-ip-alloc"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
   prefix_length = 16
   network       = var.host_vpc_id
   project       = var.host_project_id
-}
+}*/
 
-resource "google_service_networking_connection" "private_vpc_connection" {
+/*resource "google_service_networking_connection" "private_vpc_connection" {
   network                 = var.host_vpc_id
   service                 = "servicenetworking.googleapis.com"
   reserved_peering_ranges = [google_compute_global_address.private_ip_alloc.name]
-}
+}*/
 
 # ---- 2. Cloud SQL (Postgres 16) ------------------------------------
 # Lives in THIS service project, but its private IP is handed out
 # from the host VPC via the PSA connection above.
-module "db" {
+/*module "db" {
   source                = "../../../../modules/database/cloud-sql"
   project_id            = var.project_id
   region                = var.region
@@ -51,13 +51,13 @@ module "db" {
   db_peering_connection = google_service_networking_connection.private_vpc_connection.id
   db_username           = "postgres"
   db_name               = "vms-dev-services-db"
-}
+}*/
 
 # ---- 3. GKE cluster (private nodes) --------------------------------
 # Runs inside the "vms-dev-private" subnet. Pod and Service IPs come
 # from the secondary ranges that in/dev/network/in-dev-network already reserved
 # on that subnet ("vms-dev-pods" and "vms-dev-services").
-module "gke" {
+/*module "gke" {
   source = "../../../../modules/compute/gke"
 
   project_id   = var.project_id
@@ -87,14 +87,14 @@ module "gke" {
     region      = "india"
     managed_by  = "terraform"
   }
-}
+}*/
 
 # ---- 4. Secret Manager ----------------------------------------------
 # The Cloud SQL module (step 2) generates a random password and
 # returns it as an output. We immediately store it here so the
 # plaintext password never appears in any log or state file diff
 # after this point.
-module "db_secret" {
+/*module "db_secret" {
   source       = "../../../../modules/security/secret-manager"
   project_id   = var.project_id
   secret_name  = "india-vms-dev-db-password"
@@ -108,7 +108,7 @@ module "db_secret" {
   }
 
   depends_on = [module.db]
-}
+}*/
 
 # ---- 5. Cloud Storage bucket -----------------------------------------
 # Landing bucket for inbound email ingestion (e.g. an email-to-bucket
