@@ -93,7 +93,7 @@ module "subnets" {
 #   terraform import 'module.shared_vpc.google_compute_shared_vpc_service_project.service["analytics-dev-501608"]' host-dev-network/analytics-dev-501608
 #
 # (IAM networkUser bindings will be created fresh by Terraform - no import needed)
-import {
+/*import {
   to = module.shared_vpc.google_compute_shared_vpc_host_project.host
   id = var.host_project_id
 }
@@ -102,7 +102,7 @@ import {
   for_each = toset(var.service_project_ids)
   to       = module.shared_vpc.google_compute_shared_vpc_service_project.service[each.key]
   id       = "${var.host_project_id}/${each.key}"
-}
+}*/
 module "shared_vpc" {
   source              = "../../../../../modules/networking/shared-vpc"
   host_project_id     = var.host_project_id
